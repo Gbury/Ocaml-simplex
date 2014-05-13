@@ -161,6 +161,7 @@ module Make(Var: OrderedType) = struct
 
     let add_vars t l = List.fold_left add_var t l
 
+    (* TODO: check that s is not already a variable. *)
     let add_eq t (s, eq) =
         let t = add_vars t (List.map snd eq) in
         let l_eq = List.map (fun (c, x) -> List.map (fun y -> c * y) (find_expr_total t x)) eq in
