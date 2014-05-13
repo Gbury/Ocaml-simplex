@@ -81,6 +81,4 @@ let random n m =
     ()
 
 let () =
-    printf "%s@." (to_string (of_string "3e2"));
-    exit 0;
     random 9 14
