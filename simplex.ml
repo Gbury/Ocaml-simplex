@@ -466,3 +466,113 @@ module Make(Var: OrderedType) = struct
 
 end
 
+module type HELPER = sig
+  (** User provided variable type *)
+  type external_var
+
+  type var = private
+    | Intern of int
+    | Extern of external_var
+
+  (** Fresh internal variable *)
+  val fresh_var : unit -> var
+
+  (** Lift an external variable in the [var] type *)
+  val mk_var : external_var -> var
+
+  (** the usual system, but the extended variable type *)
+  include S with type var := var
+
+  type monome = (Q.t * external_var) list
+
+  type op = LessEq | Eq | GreaterEq
+
+  type constraint_ = op * monome * Q.t
+
+  val add_constraints : t -> constraint_ list -> t
+end
+
+module MakeHelp(Var : OrderedType) = struct
+  type external_var = Var.t
+
+  (* definition of the actual variable type. Note that
+    we name it _var because we include Make() later, which
+    defines the type var *)
+  type var =
+    | Intern of int
+    | Extern of external_var
+
+  let compare_var v1 v2 = match v1, v2 with
+    | Intern i, Intern j -> Pervasives.compare i j
+    | Intern _, Extern _ -> 1
+    | Extern _, Intern _ -> -1
+    | Extern v1, Extern v2 -> Var.compare v1 v2
+
+  let fresh_var =
+    let r = ref 0 in
+    fun () ->
+      let v = Intern !r in
+      incr r;
+      v
+
+  let mk_var e = Extern e
+
+  (* use the previous module *)
+  module M = Make(struct
+    type t = var
+    let compare = compare_var
+  end)
+  include (M : S with type var := var)
+
+  type monome = (Q.t * external_var) list
+
+  type op = LessEq | Eq | GreaterEq
+
+  type constraint_ = op * monome * Q.t
+
+  (* normalize a monome *)
+  let _normalize_monome l =
+    (* merge together coefficients for the same variables *)
+    let rec aux l = match l with
+      | []
+      | [_] -> l
+      | (c,_)::l' when Q.equal c Q.zero -> aux l'
+      | (c1,v1)::(c2,v2)::l' when compare_var v1 v2 = 0 ->
+          aux ((Q.add c1 c2, v1)::l')
+      | (c1,v1)::l' -> (c1,v1) :: aux l'
+    in
+    let l = List.map (fun (c,v) -> c, mk_var v) l in
+    (* sort, then merge together *)
+    let l = List.sort (fun (_,v1)(_,v2) -> compare_var v1 v2) l in
+    aux l
+
+  let add_constraints simpl l =
+    List.fold_left
+      (fun simpl c ->
+        let op, m, const = c in
+        let m = _normalize_monome m in
+        (* obtain one coefficient and variable that have bounds *)
+        let var, coeff, simpl =
+          match m with
+          | [c,v] -> v, c, simpl
+          | _ ->
+            let v = fresh_var () in
+            let simpl = add_eq simpl (v, m) in
+            v, Q.one, simpl
+        in
+        (* add bounds for the selected variable *)
+        assert(Q.sign coeff <> 0);
+        let const' = Q.div const coeff in
+        match op with
+        | Eq -> add_bounds simpl (var,const',const')
+        | LessEq ->
+            (* beware the multiplication by a negative number *)
+            if Q.sign coeff < 0
+              then add_bounds simpl (var,const',Q.inf)
+              else add_bounds simpl (var,Q.minus_inf,const')
+        | GreaterEq ->
+            if Q.sign coeff < 0
+              then add_bounds simpl (var,Q.minus_inf,const')
+              else add_bounds simpl (var,const',inf)
+      ) simpl l
+end

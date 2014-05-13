@@ -10,8 +10,7 @@ module type OrderedType = sig
 end
 
 module type S = sig
-
-    (** The given type of the varibales *)
+    (** The given type of the variables *)
     type var
 
     (** The type of a (possibly not solved) linear system *)
@@ -148,3 +147,34 @@ end
 (** Functor building an implementation of the simplex solver given a totally ordered
     type for the variables *)
 module Make : functor (Var : OrderedType) -> S with type var = Var.t
+
+
+(** {2 Higher-Level Interface} *)
+
+module type HELPER = sig
+  (** User provided variable type *)
+  type external_var
+
+  type var = private
+    | Intern of int
+    | Extern of external_var
+
+  (** Fresh internal variable *)
+  val fresh_var : unit -> var
+
+  (** Lift an external variable in the [var] type *)
+  val mk_var : external_var -> var
+
+  (** the usual system, but the extended variable type *)
+  include S with type var := var
+
+  type monome = (Q.t * external_var) list
+
+  type op = LessEq | Eq | GreaterEq
+
+  type constraint_ = op * monome * Q.t
+
+  val add_constraints : t -> constraint_ list -> t
+end
+
+module MakeHelp(Var : OrderedType) : HELPER with type external_var = Var.t
