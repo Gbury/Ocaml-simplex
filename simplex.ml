@@ -105,6 +105,8 @@ module Make(Var: OrderedType) = struct
 
     let mem x l = List.exists (fun y -> Var.compare x y = 0) l
 
+    let rec empty_expr n = if n = 0 then [] else zero :: (empty_expr (Pervasives.(-) n 1))
+
     let find_expr_basic t x =
         let rec aux l l' = match l,l' with
         | a :: r, e :: r' ->
@@ -166,7 +168,7 @@ module Make(Var: OrderedType) = struct
             raise (UnExpected "Variable already defined.");
         let t = add_vars t (List.map snd eq) in
         let l_eq = List.map (fun (c, x) -> List.map (fun y -> c * y) (find_expr_total t x)) eq in
-        let t_eq = List.fold_left (List.map2 (+)) (List.hd l_eq) (List.tl l_eq) in
+        let t_eq = List.fold_left (List.map2 (+)) (empty_expr (List.length t.nbasic)) l_eq in
         { t with
             tab = t_eq :: t.tab;
             basic = s :: t.basic;
