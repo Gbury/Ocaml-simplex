@@ -2,4 +2,5 @@
 .*.swo
 _build
 lib.docdir
+gmon.out
 main

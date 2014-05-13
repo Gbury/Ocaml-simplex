@@ -161,8 +161,9 @@ module Make(Var: OrderedType) = struct
 
     let add_vars t l = List.fold_left add_var t l
 
-    (* TODO: check that s is not already a variable. *)
     let add_eq t (s, eq) =
+        if mem s t.basic || mem s t.nbasic then
+            raise (UnExpected "Variable already defined.");
         let t = add_vars t (List.map snd eq) in
         let l_eq = List.map (fun (c, x) -> List.map (fun y -> c * y) (find_expr_total t x)) eq in
         let t_eq = List.fold_left (List.map2 (+)) (List.hd l_eq) (List.tl l_eq) in
@@ -172,11 +173,9 @@ module Make(Var: OrderedType) = struct
         }
 
     let add_bound_aux t (x, low, upp) =
-        if mem x t.basic || mem x t.nbasic then
-            let l, u = get_bounds t x in
-            { t with bounds = M.add x (max l low, min u upp) t.bounds }
-        else
-            raise (UnExpected "Variable doesn't exists")
+        let t = add_var t x in
+        let l, u = get_bounds t x in
+        { t with bounds = M.add x (max l low, min u upp) t.bounds }
 
     let add_bounds t (x, l, u) =
         let t = add_bound_aux t (x, l, u) in
@@ -496,9 +495,6 @@ end
 module MakeHelp(Var : OrderedType) = struct
   type external_var = Var.t
 
-  (* definition of the actual variable type. Note that
-    we name it _var because we include Make() later, which
-    defines the type var *)
   type var =
     | Intern of int
     | Extern of external_var
