@@ -3,9 +3,10 @@ COMP=ocamlbuild -log $(LOG) -classic-display
 OCAMLFIND= -use-ocamlfind -tag package\(zarith\)
 FLAGS=$(OCAMLFIND)
 DIRS=
-MAIN=main.p.native
 BIN=main
+MAIN=main.p.native
 DOC=lib.docdir/index.html
+LIB=simplex.cma simplex.cmxa
 GENERATED=$(MAIN) $(BIN) gmon.out
 
 all:$(MAIN)
@@ -17,18 +18,15 @@ profile:$(MAIN) $(test)
 	./$(BIN)
 	gprof $(BIN) | less
 
-rand:$(MAIN)
-	for i in `seq 1000`; do ./$(BIN) > /dev/null; echo OK;	done;
-
 $(MAIN):
 	$(COMP) $(FLAGS) $(DIRS) $(MAIN)
 	cp $(MAIN) $(BIN) && rm $(MAIN)
 
-log:
-	cat _build/$(LOG)
-
 doc:
 	$(COMP) $(FLAGS) $(DIRS) $(DOC)
+
+lib:
+	$(COMP) $(FLAGS) $(DIRS) $(LIB)
 
 clean:
 	$(COMP) -clean
