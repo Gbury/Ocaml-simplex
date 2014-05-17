@@ -79,21 +79,21 @@ module type S = sig
         bounds to the variables of a system before trying to solve it with this function.
         @param debug An optional debug option can be given, and will be applied to all systems encountered
         at the end of a branch while solving the system. Can be used for printing intermediate states of the system. *)
-    val nsolve      : t -> var list -> n_res
+    val nsolve      : t -> (var -> bool) -> n_res
 
     (** [safe_nsolve s int_vars] solves the system [s] considering the variables in [int_vars] as integers.
         This function always terminate, thanks to a global bound that is applied to all variables of int_vars.
         The global bound is also returned to allow for verification.
         Due to the bounds being very high, [safe_nsolve] may take a lot of time and memory. It is recommended to apply
         some optimizations before trying to solve system using this function. *)
-    val safe_nsolve : t -> var list -> Q.t * n_res
+    val safe_nsolve : t -> (var -> bool) -> Q.t * n_res
 
     (** {3 Simplex optimizations} *)
     (* TODO: do not modify simplexes in place/ export functions to apply optimization traces ?*)
 
     (** [tighten int_vars s] tightens all the bounds of the variables in [int_vars] and returns the list of optimizations
         performed on the system. *)
-    val tighten : var list -> t -> optim list
+    val tighten : (var -> bool) -> t -> optim list
 
     (** [normalize int_vars s], normalizes the system [s] (in place), and returns the list of optimizations performed on it.
         [int_vars] is the list of variable that should be assigned an integer.
@@ -101,10 +101,10 @@ module type S = sig
         the gcd of all coeficients is [1]. This includes the bounds of [x], except in the following case.
         If all pertinent variables (have a non-zero coeficient) in the expression of [x] are in [int_vars], then the bounds are divided by the gcd
         of the coeficients in the expression, and then rounded (since we can deduce that [x] must be an integer as well). *)
-    val normalize : var list -> t -> optim list
+    val normalize : (var -> bool) -> t -> optim list
 
     (** Apply all optimizations to a simplex. *)
-    val preprocess  : t -> var list -> optim list
+    val preprocess  : t -> (var -> bool) -> optim list
 
     (** Apply the given optimizations to the simplex. *)
     val apply_optims : (t -> optim list) list -> t -> optim list

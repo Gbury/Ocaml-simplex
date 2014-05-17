@@ -66,17 +66,17 @@ let main () =
     let s = S.add_bounds s (3, (of_int 3 * of_int n) + of_int 1,
                                (of_int 3 * of_int n) + of_int 2) in
     S.print_debug print_var std_formatter s;
-    let _ = S.preprocess s [0; 1; 2] in
+    let _ = S.preprocess s (fun _ -> true) in
     S.print_debug print_var std_formatter s;
-    let g, res = S.safe_nsolve s [0; 1; 2] in
+    let g, res = S.safe_nsolve s (fun _ -> true) in
     fprintf std_formatter "%s@\n%a@." (to_string g) print_nsol res;
     ()
 
 let random n m =
     let s = rand_sys n m in
-    let _ = S.preprocess s (ln n) in
+    let _ = S.preprocess s (fun _ -> true) in
     (* S.print_debug print_var std_formatter s; *)
-    let g,  res = S.safe_nsolve s (ln n) in
+    let g,  res = S.safe_nsolve s (fun _ -> true) in
     fprintf std_formatter "%a@." print_nsol res;
     ()
 

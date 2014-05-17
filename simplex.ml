@@ -40,12 +40,12 @@ module type S = sig
     val add_bounds  : t -> var * Q.t * Q.t -> t
     (* Simplex solving *)
     val ksolve      : ?debug:(Format.formatter -> t -> unit) -> t -> k_res
-    val nsolve      : t -> var list -> n_res
-    val safe_nsolve : t -> var list -> Q.t * n_res
+    val nsolve      : t -> (var -> bool) -> n_res
+    val safe_nsolve : t -> (var -> bool) -> Q.t * n_res
     (* Optimization functions *)
-    val tighten      : var list -> t -> optim list
-    val normalize    : var list -> t -> optim list
-    val preprocess   : t -> var list -> optim list
+    val tighten      : (var -> bool) -> t -> optim list
+    val normalize    : (var -> bool) -> t -> optim list
+    val preprocess   : t -> (var -> bool) -> optim list
     val apply_optims : (t -> optim list) list -> t -> optim list
     (* Access functions *)
     val get_tab     : t -> var list * var list * Q.t list list
@@ -337,7 +337,7 @@ module Make(Var: OrderedType) = struct
         of_bigint (Z.pow (Z.mul (Z.of_int 2) (Z.mul (Z.pow (Z.of_int n) 2) max_coef)) n)
 
     let bound_all t int_vars g =
-        List.fold_left (fun t x -> add_bounds t (x, neg g, g)) t int_vars
+        List.fold_left (fun t x -> add_bounds t (x, neg g, g)) t (List.filter int_vars t.nbasic)
 
     type optim =
         | Tight of Var.t
@@ -351,7 +351,7 @@ module Make(Var: OrderedType) = struct
     let ceil v = neg (floor (neg v))
 
     let normalize int_vars t =
-        let mask = List.map (fun x -> mem x int_vars) t.nbasic in
+        let mask = List.map int_vars t.nbasic in
         let aux x expr =
             let tmp = ref [] in
             let l, u = get_bounds t x in
@@ -381,7 +381,7 @@ module Make(Var: OrderedType) = struct
             end else
                 acc
         in
-        List.fold_left aux [] int_vars
+        List.fold_left aux [] (List.filter int_vars t.nbasic)
 
     let apply_optims l t =
         List.fold_left (fun acc f -> acc @ (f t)) [] l
@@ -401,7 +401,7 @@ module Make(Var: OrderedType) = struct
         let f = fun _ _ -> () in
         let to_do = Queue.create () in
         let final = ref None in
-        Queue.push (t.bounds, (List.hd int_vars, minus_inf, inf), final) to_do;
+        Queue.push (t.bounds, (List.hd t.nbasic, minus_inf, inf), final) to_do;
         try
             while true do
                 let bounds, new_bound, res = Queue.pop to_do in
@@ -411,7 +411,7 @@ module Make(Var: OrderedType) = struct
                     add_bounds_imp t new_bound;
                     solve_aux f t;
                     let sol = get_full_assign t in
-                    let nsol = List.filter (fun (x, v) -> mem x int_vars && not(is_z v)) sol in
+                    let nsol = List.filter (fun (x, v) -> int_vars x && not(is_z v)) sol in
                     if nsol = [] then
                         raise (SolutionFound sol)
                     else begin
@@ -437,6 +437,8 @@ module Make(Var: OrderedType) = struct
 
     let nsolve t int_vars =
         let init_bounds = t.bounds in
+        if List.length t.nbasic = 0 then
+            raise (Invalid_argument "Simplex is empty.");
         let res = nsolve_aux t int_vars in
         t.bounds <- init_bounds;
         res
