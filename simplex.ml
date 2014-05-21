@@ -411,7 +411,7 @@ module Make(Var: OrderedType) = struct
                     add_bounds_imp t new_bound;
                     solve_aux f t;
                     let sol = get_full_assign t in
-                    let nsol = List.filter (fun (x, v) -> int_vars x && not(is_z v)) sol in
+                    let nsol = List.filter (fun (x, v) -> mem x int_vars && not(is_z v)) sol in
                     if nsol = [] then
                         raise (SolutionFound sol)
                     else begin
@@ -439,7 +439,7 @@ module Make(Var: OrderedType) = struct
         let init_bounds = t.bounds in
         if List.length t.nbasic = 0 then
             raise (Invalid_argument "Simplex is empty.");
-        let res = nsolve_aux t int_vars in
+        let res = nsolve_aux t (List.filter int_vars t.nbasic) in
         t.bounds <- init_bounds;
         res
 
