@@ -68,7 +68,7 @@ let main () =
     S.print_debug print_var std_formatter s;
     let _ = S.preprocess s (fun _ -> true) in
     S.print_debug print_var std_formatter s;
-    let g, res = S.safe_nsolve s (fun _ -> true) in
+    let g, res = S.nsolve_safe s (fun _ -> true) in
     fprintf std_formatter "%s@\n%a@." (to_string g) print_nsol res;
     ()
 
@@ -76,9 +76,12 @@ let random n m =
     let s = rand_sys n m in
     let _ = S.preprocess s (fun _ -> true) in
     (* S.print_debug print_var std_formatter s; *)
-    let g,  res = S.safe_nsolve s (fun _ -> true) in
-    fprintf std_formatter "%a@." print_nsol res;
-    ()
+    let res = S.nsolve_incr s (fun _ -> true) () in
+    match res with
+    | Some res' ->
+            fprintf std_formatter "%a@." print_nsol res'
+    | None ->
+            fprintf std_formatter "Reached max_depth@."
 
 let () =
     random 9 14

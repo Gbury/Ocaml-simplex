@@ -41,7 +41,8 @@ module type S = sig
     (* Simplex solving *)
     val ksolve      : ?debug:(Format.formatter -> t -> unit) -> t -> k_res
     val nsolve      : t -> (var -> bool) -> n_res
-    val safe_nsolve : t -> (var -> bool) -> Q.t * n_res
+    val nsolve_safe : t -> (var -> bool) -> Q.t * n_res
+    val nsolve_incr : t -> (var -> bool) -> (unit -> n_res option)
     (* Optimization functions *)
     val tighten      : (var -> bool) -> t -> optim list
     val normalize    : (var -> bool) -> t -> optim list
@@ -397,14 +398,16 @@ module Make(Var: OrderedType) = struct
 
     (* Strangely here, using Queue instade of Stack leads to better perfomances *)
     (* TODO: insert user functions between iterations ? + debug function for ksolve ? *)
-    let nsolve_aux t int_vars =
+    let nsolve_aux max_depth t int_vars =
         let f = fun _ _ -> () in
         let to_do = Queue.create () in
         let final = ref None in
-        Queue.push (t.bounds, (List.hd t.nbasic, minus_inf, inf), final) to_do;
+        Queue.push (0, t.bounds, (List.hd t.nbasic, minus_inf, inf), final) to_do;
         try
             while true do
-                let bounds, new_bound, res = Queue.pop to_do in
+                let depth, bounds, new_bound, res = Queue.pop to_do in
+                if max_depth > 0 && depth > max_depth then
+                    raise Exit;
                 (* We can assume res = ref None *)
                 try
                     t.bounds <- bounds;
@@ -419,8 +422,8 @@ module Make(Var: OrderedType) = struct
                         let v' = Z.ediv (num v) (den v) in
                         let under, above = (ref None), (ref None) in
                         res := Some (Branch (x, v', under, above));
-                        Queue.push (t.bounds, (x, of_bigint (Z.succ v'), inf), above) to_do;
-                        Queue.push (t.bounds, (x, minus_inf, of_bigint v'), under) to_do;
+                        Queue.push (Pervasives.(+) depth 1, t.bounds, (x, of_bigint (Z.succ v'), inf), above) to_do;
+                        Queue.push (Pervasives.(+) depth 1, t.bounds, (x, minus_inf, of_bigint v'), under) to_do;
                     end
                 with
                 | Unsat x ->
@@ -439,13 +442,30 @@ module Make(Var: OrderedType) = struct
         let init_bounds = t.bounds in
         if List.length t.nbasic = 0 then
             raise (Invalid_argument "Simplex is empty.");
-        let res = nsolve_aux t (List.filter int_vars t.nbasic) in
+        let res = nsolve_aux 0 t (List.filter int_vars t.nbasic) in
         t.bounds <- init_bounds;
         res
 
-    let safe_nsolve t int_vars =
+    let nsolve_safe t int_vars =
         let g = global_bound t in
         g, nsolve (bound_all t int_vars g) int_vars
+
+    let base_depth t = Pervasives.(+) 100 (Pervasives.( * ) 10 (List.length t.nbasic))
+
+    let nsolve_incr t int_vars =
+        let init_bounds = t.bounds in
+        let int_vars = (List.filter int_vars t.nbasic) in
+        let max_depth = ref (base_depth t) in
+        let f () =
+            try
+                let res = nsolve_aux !max_depth t int_vars in
+                t.bounds <- init_bounds;
+                Some (res)
+            with Exit ->
+                max_depth := Pervasives.( * ) 2 !max_depth;
+                None
+        in
+        f
 
     let get_tab t = t.nbasic, t.basic, t.tab
     let get_assign t = M.bindings t.assign

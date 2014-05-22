@@ -86,7 +86,11 @@ module type S = sig
         The global bound is also returned to allow for verification.
         Due to the bounds being very high, [safe_nsolve] may take a lot of time and memory. It is recommended to apply
         some optimizations before trying to solve system using this function. *)
-    val safe_nsolve : t -> (var -> bool) -> Q.t * n_res
+    val nsolve_safe : t -> (var -> bool) -> Q.t * n_res
+
+    (** Returns a function that can be called multiple times, each time trying to solve the system with an increasing
+        maximum on the depth of the branching tree. *)
+    val nsolve_incr : t -> (var -> bool) -> ( unit -> n_res option)
 
     (** {3 Simplex optimizations} *)
     (* TODO: do not modify simplexes in place/ export functions to apply optimization traces ?*)
