@@ -379,19 +379,16 @@ module Make(Var: OrderedType) = struct
                     t.bounds <- bounds;
                     add_bounds_imp t new_bound;
                     solve_aux f t;
-                    let sol = get_full_assign t in
-                    let nsol = List.filter (fun (x, v) -> mem x int_vars && not(is_z v)) sol in
-                    if nsol = [] then
-                        raise (SolutionFound sol)
-                    else begin
-                        let x, v = List.hd nsol in
-                        let v' = Z.ediv (Q.num v) (Q.den v) in
-                        let under, above = (ref None), (ref None) in
-                        res := Some (Branch (x, v', under, above));
-                        Queue.push (depth + 1, t.bounds, (x, Q.of_bigint (Z.succ v'), Q.inf), above) to_do;
-                        Queue.push (depth + 1, t.bounds, (x, Q.minus_inf, Q.of_bigint v'), under) to_do;
-                    end
+                    let x = List.find (fun y -> not (is_z (value t y))) int_vars in
+                    let v = value t x in
+                    let v' = Z.ediv (Q.num v) (Q.den v) in
+                    let under, above = (ref None), (ref None) in
+                    res := Some (Branch (x, v', under, above));
+                    Queue.push (depth + 1, t.bounds, (x, Q.of_bigint (Z.succ v'), Q.inf), above) to_do;
+                    Queue.push (depth + 1, t.bounds, (x, Q.minus_inf, Q.of_bigint v'), under) to_do
                 with
+                | Not_found ->
+                    raise (SolutionFound (get_full_assign t))
                 | Unsat x ->
                         res := Some (Explanation (x, List.combine (find_expr_basic t x) t.nbasic))
                 | AbsurdBounds x ->
@@ -408,7 +405,7 @@ module Make(Var: OrderedType) = struct
         let init_bounds = t.bounds in
         if List.length t.nbasic = 0 then
             raise (Invalid_argument "Simplex is empty.");
-        let res = nsolve_aux 0 t (List.filter int_vars t.nbasic) in
+        let res = nsolve_aux 0 t (List.filter int_vars (t.nbasic @ t.basic)) in
         t.bounds <- init_bounds;
         res
 
@@ -416,11 +413,11 @@ module Make(Var: OrderedType) = struct
         let g = global_bound t in
         g, nsolve (bound_all t int_vars g) int_vars
 
-    let base_depth t = 10 + (List.length t.nbasic)
+    let base_depth t = 100 + 2 * (List.length t.nbasic)
 
     let nsolve_incr t int_vars =
         let init_bounds = t.bounds in
-        let int_vars = (List.filter int_vars t.nbasic) in
+        let int_vars = (List.filter int_vars (t.nbasic @ t.basic)) in
         let max_depth = ref (base_depth t) in
         let f () =
             try

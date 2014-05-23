@@ -84,4 +84,4 @@ let random n m =
             fprintf std_formatter "Reached max_depth@."
 
 let () =
-    random 9 14
+    random 7 13
