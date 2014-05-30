@@ -422,14 +422,18 @@ module Make(Var: OrderedType) = struct
         let init_bounds = t.bounds in
         let int_vars = (List.filter int_vars t.nbasic) in
         let max_depth = ref (base_depth t) in
-        let f () =
-            try
-                let res = nsolve_aux !max_depth t int_vars in
-                t.bounds <- init_bounds;
-                Some (res)
-            with Exit ->
-                max_depth := 2 * !max_depth;
-                None
+        let acc = ref None in
+        let f () = match !acc with
+            | Some _ -> !acc
+            | None ->
+                    try
+                        let res = nsolve_aux !max_depth t int_vars in
+                        t.bounds <- init_bounds;
+                        acc := Some res;
+                        Some (res)
+                    with Exit ->
+                        max_depth := 2 * !max_depth;
+                        None
         in
         f
 
