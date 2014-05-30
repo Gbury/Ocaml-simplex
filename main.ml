@@ -76,12 +76,12 @@ let random n m =
     let s = rand_sys n m in
     let _ = S.preprocess s (fun _ -> true) in
     (* S.print_debug print_var std_formatter s; *)
-    let res = S.nsolve_incr s (fun _ -> true) () in
-    match res with
+    let res = S.nsolve_incr s (fun _ -> true) in
+    match res () with
     | Some res' ->
             fprintf std_formatter "%a@." print_nsol res'
     | None ->
             fprintf std_formatter "Reached max_depth@."
 
 let () =
-    random 9 14
+    random 7 13
