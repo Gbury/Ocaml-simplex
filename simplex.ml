@@ -416,6 +416,8 @@ module Make(Var: OrderedType) = struct
     let base_depth t = 100 + 2 * (List.length t.nbasic)
 
     let nsolve_incr t int_vars =
+        if List.length t.nbasic = 0 then
+            raise (Invalid_argument "Simplex is empty.");
         let init_bounds = t.bounds in
         let int_vars = (List.filter int_vars (t.nbasic @ t.basic)) in
         let max_depth = ref (base_depth t) in
