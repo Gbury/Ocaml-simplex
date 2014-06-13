@@ -432,6 +432,7 @@ module Make(Var: OrderedType) = struct
                         Some (res)
                     with Exit ->
                         max_depth := 2 * !max_depth;
+                        t.bounds <- init_bounds;
                         None
         in
         f
