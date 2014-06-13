@@ -46,11 +46,12 @@ module type S = sig
     val preprocess   : t -> (var -> bool) -> optim list
     val apply_optims : (t -> optim list) list -> t -> optim list
     (* Access functions *)
-    val get_tab     : t -> var list * var list * Q.t list list
-    val get_assign  : t -> (var * Q.t) list
+    val get_tab         : t -> var list * var list * Q.t list list
+    val get_assign      : t -> (var * Q.t) list
     val get_full_assign : t -> (var * Q.t) list
-    val get_bounds  : t -> var -> Q.t * Q.t
-    val get_all_bounds : t -> (var * (Q.t * Q.t)) list
+    val get_bounds      : t -> var -> Q.t * Q.t
+    val get_all_bounds  : t -> (var * (Q.t * Q.t)) list
+    val abstract        : t -> (var -> bool) -> (var -> bool) -> (var * (Q.t * var) list) list
     (* Printing functions *)
     val print_debug : (Format.formatter -> var -> unit) -> (Format.formatter -> t -> unit)
 end
@@ -116,6 +117,18 @@ module Make(Var: OrderedType) = struct
         | _ -> raise (UnExpected "Internal representation error : different list length")
         in
         aux t.basic t.tab
+
+    let find_coef t x y =
+        let rec aux l l' = match l,l' with
+        | a :: r, c :: r' ->
+                if Var.compare y a = 0 then
+                    c
+                else
+                    aux r r'
+        | [], [] -> assert false
+        | _ -> raise (UnExpected "Internal representation error : different list length")
+        in
+        aux t.nbasic (find_expr_basic t x)
 
     let find_expr_nbasic t x = List.map (fun y -> if Var.compare x y = 0 then Q.one else Q.zero) t.nbasic
 
@@ -437,6 +450,33 @@ module Make(Var: OrderedType) = struct
         in
         f
 
+    (* Use with caution *)
+    let rec to_nbasic t pred =
+        try
+            let x = List.find pred t.basic in
+            let y = try List.find (fun z -> not (pred z)) t.nbasic with Not_found -> assert false in
+            let c = find_coef t x y in
+            t.tab <- pivot t x y c;
+            t.basic <- subst x y t.basic;
+            t.nbasic <- subst y x t.nbasic;
+            to_nbasic t pred
+        with Not_found -> ()
+
+    let abstract_aux t symbolic v =
+        if mem v t.nbasic then begin
+            let y = List.hd t.basic in
+            let c = find_coef t v y in
+            t.tab <- pivot t v y c;
+            t.basic <- subst v y t.basic;
+            t.nbasic <- subst y v t.nbasic;
+        end;
+        to_nbasic t symbolic;
+        find_expr_basic t v
+
+    let abstract t keep symbolic =
+        let l = List.filter keep (t.basic @ t.nbasic) in
+        List.map (fun v -> v, List.combine (abstract_aux t symbolic v) t.nbasic) l
+
     let get_tab t = t.nbasic, t.basic, t.tab
     let get_assign t = M.bindings t.assign
     let get_all_bounds t = M.bindings t.bounds
@@ -484,6 +524,9 @@ module type HELPER = sig
   type constraint_ = op * monome * Q.t
 
   val add_constraints : t -> constraint_ list -> t
+
+  val abstract_val : t -> (external_var -> bool) -> (external_var -> bool) ->
+      (external_var * ((Q.t * external_var) list * Q.t)) list
 end
 
 module MakeHelp(Var : OrderedType) = struct
@@ -566,4 +609,19 @@ module MakeHelp(Var : OrderedType) = struct
               then add_bounds simpl (var,Q.minus_inf,const')
               else add_bounds simpl (var,const',Q.inf)
       ) simpl l
+
+  let extern_pred p = function
+      | Extern v -> p v
+      | Intern _ -> false
+
+  let abstract_val t keep symbolic =
+      let l = abstract t (extern_pred keep) (extern_pred symbolic) in
+      let context = get_full_assign t in
+      let aux e =
+          let l1, l2 = List.partition (fun (_, x) -> extern_pred symbolic x) e in
+          (List.map (fun (c, x) -> c, match x with Extern x -> x | _ -> assert false) l1),
+          List.fold_left Q.add Q.zero (List.map (fun (c, x) -> Q.mul c (List.assq x context)) l2)
+      in
+      List.map (fun (v, e) -> (match v with Extern v -> v | _ -> assert false), aux e) l
+
 end

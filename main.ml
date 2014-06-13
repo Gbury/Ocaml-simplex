@@ -1,7 +1,7 @@
 
 open Q
 open Format
-module S = Simplex.Make(struct type t = int let compare = Pervasives.compare end)
+module S = Simplex.MakeHelp(struct type t = int let compare = Pervasives.compare end)
 ;;
 Random.self_init ()
 ;;
@@ -11,7 +11,9 @@ let max_depth = 5
 let max_rand = 100
 let bound_range = 30
 
-let print_var fmt x = fprintf fmt "v%d" x
+let print_var fmt = function
+    | S.Extern x -> fprintf fmt "v%d" x
+    | S.Intern i -> fprintf fmt "i%d" i
 
 let print_short fmt = function
     | S.Solution _ -> fprintf fmt "SAT"
@@ -19,12 +21,20 @@ let print_short fmt = function
 
 let print_res f fmt = function
     | S.Solution l ->
-            fprintf fmt "Sol:@\n%a@." (fun fmt -> List.iter (fun (x, v) -> fprintf fmt "%i : %s@\n" x (to_string v))) l
+            fprintf fmt "Sol:@\n%a@." (fun fmt -> List.iter (fun (x, v) -> fprintf fmt "%a : %s@\n" print_var x (to_string v))) l
     | S.Unsatisfiable c -> fprintf fmt "UNSAT:@\n%a@." f c
 
 let print_unsat fmt (x, l) =
     fprintf fmt "%a =@ @[<hov 2>%a@]" print_var x (fun fmt l ->
         if l = [] then fprintf fmt "()" else List.iter (fun (c, x) -> fprintf fmt "%s * %a +@ " (to_string c) print_var x) l) l
+
+let print_abs fmt l =
+    let aux (x, (e, k)) =
+        fprintf fmt "%d == %a + %s@." x
+        (fun fmt -> List.iter (fun (c, x) -> fprintf fmt "%s * %d" (to_string c) x)) e
+        (to_string k)
+    in
+    List.iter aux l
 
 let rec print_branch n fmt b =
     if n > max_depth then
@@ -41,6 +51,7 @@ let rec print_branch n fmt b =
 let print_ksol = print_res print_unsat
 let print_nsol = print_res (print_branch 0)
 
+(*
 let rand_z () = (of_int (Random.int max_rand)) - ((of_int max_rand) / (of_int 2))
 let rand_bounds x =
     match Random.int 3 with
@@ -59,19 +70,6 @@ let rand_sys n m =
     let aux2 s x = S.add_bounds s (rand_bounds x) in
     List.fold_left aux2 (List.fold_left aux1 S.empty basic) basic
 
-let main () =
-    let n = 0 in
-    let s = S.empty in
-    let s = S.add_eq s (3, [of_int 3, 0; of_int 3, 1; of_int 3, 2]) in
-    let s = S.add_bounds s (3, (of_int 3 * of_int n) + of_int 1,
-                               (of_int 3 * of_int n) + of_int 2) in
-    S.print_debug print_var std_formatter s;
-    let _ = S.preprocess s (fun _ -> true) in
-    S.print_debug print_var std_formatter s;
-    let g, res = S.nsolve_safe s (fun _ -> true) in
-    fprintf std_formatter "%s@\n%a@." (to_string g) print_nsol res;
-    ()
-
 let random n m =
     let s = rand_sys n m in
     let _ = S.preprocess s (fun _ -> true) in
@@ -82,6 +80,18 @@ let random n m =
             fprintf std_formatter "%a@." print_nsol res'
     | None ->
             fprintf std_formatter "Reached max_depth@."
+*)
+
+
+let main () =
+    let s = S.empty in
+    let s = S.add_constraints s [
+        S.GreaterEq, [of_int 1, 1; of_int (-1), 2], of_int 1;
+    ] in
+    let res = S.nsolve s (fun _ -> true) in
+    fprintf std_formatter "%a@\n%a@." print_nsol res print_abs (S.abstract_val s (fun i -> i = 1) (fun i -> i = 2));
+    ()
+
 
 let () =
-    random 7 13
+    main ()
