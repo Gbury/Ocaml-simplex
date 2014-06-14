@@ -1,0 +1,5 @@
+PKG zarith
+
+S ./
+
+B _build/
