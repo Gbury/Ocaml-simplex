@@ -54,7 +54,7 @@ module type S = sig
     val get_all_bounds  : t -> (var * (Q.t * Q.t)) list
     val abstract        : t -> (var -> bool) -> (var -> bool) -> (var * (Q.t * var) list) list
     (* Printing functions *)
-    val print_debug : (Format.formatter -> var -> unit) -> (Format.formatter -> t -> unit)
+    val print_debug : (var -> string) -> (out_channel -> t -> unit)
 end
 
 (* Simplex Implementation *)
@@ -490,21 +490,41 @@ module Make(Var: OrderedType) = struct
     let get_assign t = M.bindings t.assign
     let get_all_bounds t = M.bindings t.bounds
 
-    let print_bounds print_var fmt b =
-        M.iter (fun x (l, u) -> Format.fprintf fmt "%s\t<= %a\t<= %s@\n" (Q.to_string l) print_var x (Q.to_string u)) b
+    let tab_box var_to_string t =
+        let a = Array.init (List.length t.basic + 1) (fun i ->
+                Array.init (List.length t.nbasic + 1) (fun j ->
+                    if i = 0 then
+                        if j = 0 then
+                            "..."
+                        else
+                            Format.sprintf " %s " (var_to_string (List.nth t.nbasic (j - 1)))
+                    else
+                        if j = 0 then
+                            Format.sprintf " %s " (var_to_string (List.nth t.basic (i - 1)))
+                        else (* i > 0 && j > 0 *)
+                            Format.sprintf " %s " (Q.to_string (List.nth (List.nth t.tab (i - 1)) (j - 1)))
+                )) in
+        Printbox.grid_text ~framed:true a
 
-    let print_tab print_var fmt (l, tab) =
-        let aux fmt = List.iter (fun y -> Format.fprintf fmt "%s\t" (Q.to_string y)) in
-        List.iter2 (fun x e -> Format.fprintf fmt "%a\t%a@\n" print_var x aux e) l tab
+    let bounds_box var_to_string t =
+        let a = Array.make_matrix (M.cardinal t.bounds) 5 "<=" in
+        let i = ref 0 in
+        M.iter (fun x (l, u) ->
+            a.(!i).(0) <- Q.to_string l;
+            a.(!i).(2) <- var_to_string x;
+            a.(!i).(4) <- Q.to_string u;
+            incr i;
+        ) t.bounds;
+        Printbox.grid_text ~framed:false a
 
     let print_assign print_var fmt l =
-        List.iter (fun (x, c) -> Format.fprintf fmt "%a -> %s;@ " print_var x (Q.to_string c)) l
+        List.iter (fun (x, c) -> Format.fprintf fmt "%s -> %s;@ " (print_var x) (Q.to_string c)) l
 
-    let print_debug print_var fmt t =
-        Format.fprintf fmt "@[<hov 2>*** System state ***@\n\t%a@\n%aBounds:@\n%aCurrent assign:@\n%a@]@\n******** END ********@."
-            (fun fmt -> List.iter (fun x -> Format.fprintf fmt "%a\t" print_var x)) t.nbasic
-            (print_tab print_var) (t.basic, t.tab)
-            (print_bounds print_var) t.bounds
+    let print_debug print_var out t =
+        Format.fprintf (Format.formatter_of_out_channel out)
+            "@[*** System state ***@.%a@.%a@[<hov 2>@\nCurrent assign:@\n%a@]@\n******** END ********@."
+            (fun _ -> Printbox.output ~indent:2 out) (tab_box print_var t)
+            (fun _ -> Printbox.output ~indent:2 out) (bounds_box print_var t)
             (print_assign print_var) (get_assign t)
 
 end

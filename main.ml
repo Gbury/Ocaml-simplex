@@ -11,9 +11,11 @@ let max_depth = 5
 let max_rand = 100
 let bound_range = 30
 
-let print_var fmt = function
-    | S.Extern x -> fprintf fmt "v%d" x
-    | S.Intern i -> fprintf fmt "i%d" i
+let svar = function
+    | S.Extern x -> sprintf "v%d" x
+    | S.Intern i -> sprintf "i%d" i
+
+let print_var fmt x = fprintf fmt "%s" (svar x)
 
 let print_short fmt = function
     | S.Solution _ -> fprintf fmt "SAT"
@@ -89,7 +91,10 @@ let main () =
         S.GreaterEq, [of_int 1, 1; of_int (-1), 2], of_int 1;
     ] in
     let res = S.nsolve s (fun _ -> true) in
-    fprintf std_formatter "%a@\n%a@." print_nsol res print_abs (S.abstract_val s (fun i -> i = 1) (fun i -> i = 2));
+    fprintf std_formatter "%a@\n%a@\n%a@."
+        (fun _ -> S.print_debug svar stdout) s
+        print_nsol res
+        print_abs (S.abstract_val s (fun i -> i = 1) (fun i -> i = 2));
     ()
 
 
