@@ -465,6 +465,7 @@ module Make(Var: OrderedType) = struct
             let x = List.find pred t.basic in
             let y = try List.find (fun z -> not (pred z)) t.nbasic with Not_found -> assert false in
             let c = find_coef t x y in
+            t.assign <- M.add x (value t x) (M.remove y t.assign);
             t.tab <- pivot t x y c;
             t.basic <- subst x y t.basic;
             t.nbasic <- subst y x t.nbasic;
@@ -472,19 +473,23 @@ module Make(Var: OrderedType) = struct
         with Not_found -> ()
 
     let abstract_aux t symbolic v =
-        if mem v t.nbasic then begin
-            let y = List.hd t.basic in
-            let c = find_coef t v y in
-            t.tab <- pivot t v y c;
-            t.basic <- subst v y t.basic;
-            t.nbasic <- subst y v t.nbasic;
-        end;
-        to_nbasic t symbolic;
-        find_expr_basic t v
+        try
+            if mem v t.nbasic then begin
+                let x = List.hd t.basic in
+                let y = v in
+                let c = find_coef t x y in
+                t.assign <- M.add x (value t x) (M.remove y t.assign);
+                t.tab <- pivot t x y c;
+                t.basic <- subst x y t.basic;
+                t.nbasic <- subst y x t.nbasic;
+            end;
+            to_nbasic t symbolic;
+            find_expr_basic t v
+        with Failure "hd" -> raise Exit
 
     let abstract t keep symbolic =
         let l = List.filter keep (t.basic @ t.nbasic) in
-        List.map (fun v -> v, List.combine (abstract_aux t symbolic v) t.nbasic) l
+        List.map (fun v -> v, try List.combine (abstract_aux t symbolic v) t.nbasic with Exit -> []) l
 
     let get_tab t = t.nbasic, t.basic, t.tab
     let get_assign t = M.bindings t.assign
@@ -522,7 +527,7 @@ module Make(Var: OrderedType) = struct
         Printbox.grid_text ~framed:false a
 
     let print_assign print_var fmt l =
-        List.iter (fun (x, c) -> Format.fprintf fmt "%s -> %s;@ " (print_var x) (Q.to_string c)) l
+        List.iter (fun (x, c) -> Format.fprintf fmt "%a -> %s;@ " print_var x (Q.to_string c)) l
 
     let print_debug print_var fmt t =
         Format.fprintf fmt
@@ -650,11 +655,14 @@ module MakeHelp(Var : OrderedType) = struct
   let abstract_val t keep symbolic =
       let l = abstract t (extern_pred keep) (extern_pred symbolic) in
       let context = get_full_assign t in
-      let aux e =
-          let l1, l2 = List.partition (fun (_, x) -> extern_pred symbolic x) e in
-          (List.map (fun (c, x) -> c, match x with Extern x -> x | _ -> assert false) l1),
-          List.fold_left Q.add Q.zero (List.map (fun (c, x) -> Q.mul c (List.assq x context)) l2)
+      let aux v e =
+          if e = [] then
+              [], List.assq v context
+          else
+              let l1, l2 = List.partition (fun (_, x) -> extern_pred symbolic x) e in
+              (List.map (fun (c, x) -> c, match x with Extern x -> x | _ -> assert false) l1),
+              List.fold_left Q.add Q.zero (List.map (fun (c, x) -> Q.mul c (List.assq x context)) l2)
       in
-      List.map (fun (v, e) -> (match v with Extern v -> v | _ -> assert false), aux e) l
+      List.map (fun (v, e) -> (match v with Extern v -> v | _ -> assert false), aux v e) l
 
 end

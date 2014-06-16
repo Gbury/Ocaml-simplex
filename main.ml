@@ -88,6 +88,7 @@ let random n m =
 let main () =
     let s = S.empty in
     let s = S.add_constraints s [
+        S.GreaterEq, [of_int 1, 3], of_int 2;
         S.GreaterEq, [of_int 1, 1; of_int (-1), 2], of_int 1;
     ] in
     let res = S.nsolve s (fun _ -> true) in
