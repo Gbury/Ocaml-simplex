@@ -89,7 +89,10 @@ let main () =
         S.GreaterEq, [of_int 1, 1; of_int (-1), 2], of_int 1;
     ] in
     let res = S.nsolve s (fun _ -> true) in
-    fprintf std_formatter "%a@\n%a@." print_nsol res print_abs (S.abstract_val s (fun i -> i = 1) (fun i -> i = 2));
+    fprintf std_formatter "%a@\n%a@\n%a@."
+        (S.print_debug print_var) s
+        print_nsol res
+        print_abs (S.abstract_val s (fun i -> i = 1) (fun i -> i = 2));
     ()
 
 
