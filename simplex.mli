@@ -151,7 +151,6 @@ module type S = sig
         It can for instance be used as the debug function of [solve] to see the evolution of the simplex. *)
     val print_debug : (Format.formatter -> var -> unit) -> debug_printer
 
-
 end
 
 (** Functor building an implementation of the simplex solver given a totally ordered

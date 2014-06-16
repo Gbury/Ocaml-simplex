@@ -522,7 +522,7 @@ module Make(Var: OrderedType) = struct
         Printbox.grid_text ~framed:false a
 
     let print_assign print_var fmt l =
-        List.iter (fun (x, c) -> Format.fprintf fmt "%a -> %s;@ " print_var x (Q.to_string c)) l
+        List.iter (fun (x, c) -> Format.fprintf fmt "%s -> %s;@ " (print_var x) (Q.to_string c)) l
 
     let print_debug print_var fmt t =
         Format.fprintf fmt

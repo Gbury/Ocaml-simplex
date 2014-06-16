@@ -11,9 +11,11 @@ let max_depth = 5
 let max_rand = 100
 let bound_range = 30
 
-let print_var fmt = function
-    | S.Extern x -> fprintf fmt "v%d" x
-    | S.Intern i -> fprintf fmt "i%d" i
+let svar = function
+    | S.Extern x -> sprintf "v%d" x
+    | S.Intern i -> sprintf "i%d" i
+
+let print_var fmt x = fprintf fmt "%s" (svar x)
 
 let print_short fmt = function
     | S.Solution _ -> fprintf fmt "SAT"
