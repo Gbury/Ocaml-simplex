@@ -32,8 +32,8 @@ let print_unsat fmt (x, l) =
 
 let print_abs fmt l =
     let aux (x, (e, k)) =
-        fprintf fmt "%d == %a + %s@." x
-        (fun fmt -> List.iter (fun (c, x) -> fprintf fmt "%s * %d" (to_string c) x)) e
+        fprintf fmt "v%d == %a%s@." x
+        (fun fmt -> List.iter (fun (c, x) -> fprintf fmt "%s * v%d + " (to_string c) x)) e
         (to_string k)
     in
     List.iter aux l
@@ -88,14 +88,15 @@ let random n m =
 let main () =
     let s = S.empty in
     let s = S.add_constraints s [
-        S.GreaterEq, [of_int 1, 3], of_int 2;
-        S.GreaterEq, [of_int 1, 1; of_int (-1), 2], of_int 1;
+        S.Eq, [of_int 1, 0; of_int (-2), 1], of_int 0;
+        S.LessEq, [of_int 2, 2; of_int (-1), 0], of_int 0;
     ] in
     let res = S.nsolve s (fun _ -> true) in
+    let abs = S.abstract_val s (fun i -> i = 2 || i = 2) (fun i -> i = 1 || i = 1) in
     fprintf std_formatter "%a@\n%a@\n%a@."
         (S.print_debug print_var) s
         print_nsol res
-        print_abs (S.abstract_val s (fun i -> i = 1) (fun i -> i = 2));
+        print_abs abs;
     ()
 
 
