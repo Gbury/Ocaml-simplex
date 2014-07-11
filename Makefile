@@ -1,3 +1,5 @@
+# copyright (c) 2014, guillaume bury
+
 LOG=build.log
 COMP=ocamlbuild -log $(LOG) -classic-display
 OCAMLFIND= -use-ocamlfind -tag package\(zarith\)
