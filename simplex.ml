@@ -24,7 +24,6 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *)
 
-(* TODO: Use Arrays instead of lists. *)
 (* OPTIMS:
  * - distinguish separate systems (that do not interact), such as in { 1 <= 3x = 3y <= 2; z <= 3}.
  * - Implement gomorry cuts ?
@@ -529,34 +528,6 @@ module Make(Var: OrderedType) = struct
         in
         f
 
-    (* Use with caution *)
-    let rec to_nbasic t pred =
-        try
-            let x = List.find pred (Array.to_list t.basic) in
-            let y = try
-                List.find (fun z -> not (pred z) && not (Q.equal Q.zero (find_coef t x z))) (Array.to_list t.nbasic)
-                with Not_found -> assert false in
-            let c = find_coef t x y in
-            pivot t x y c;
-            to_nbasic t pred
-        with Not_found -> ()
-
-    let abstract_aux t symbolic v =
-        try
-            if mem v t.nbasic then begin
-                let x = List.find (fun z -> not (Q.equal Q.zero (find_coef t z v))) (Array.to_list t.basic) in
-                let y = v in
-                let c = find_coef t x y in
-                pivot t x y c;
-            end;
-            to_nbasic t symbolic;
-            Array.to_list (find_expr_basic t v)
-        with Not_found -> raise Exit
-
-    let abstract t keep symbolic =
-        let l = List.filter keep (Array.to_list t.basic @ Array.to_list t.nbasic) in
-        List.map (fun v -> v, try List.combine (abstract_aux t symbolic v) (Array.to_list t.nbasic) with Exit -> []) l
-
     let get_tab t =
         Array.to_list t.nbasic,
         Array.to_list t.basic,
@@ -713,24 +684,5 @@ module MakeHelp(Var : OrderedType) = struct
               then add_bounds simpl (var,Q.minus_inf,const')
               else add_bounds simpl (var,const',Q.inf)
       ) simpl l
-
-  let extern_pred p = function
-      | Extern v -> p v
-      | Intern _ -> false
-
-    (*
-  let abstract_val t keep symbolic =
-      let l = abstract t (extern_pred keep) (extern_pred symbolic) in
-      let context = get_full_assign t in
-      let aux v e =
-          if e = [] then
-              [], List.assq v context
-          else
-              let l1, l2 = List.partition (fun (_, x) -> extern_pred symbolic x) e in
-              (List.map (fun (c, x) -> c, match x with Extern x -> x | _ -> assert false) l1),
-              List.fold_left Q.add Q.zero (List.map (fun (c, x) -> Q.mul c (List.assq x context)) l2)
-      in
-      List.map (fun (v, e) -> (match v with Extern v -> v | _ -> assert false), aux v e) l
-    *)
 
 end

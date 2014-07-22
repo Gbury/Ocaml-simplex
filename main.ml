@@ -79,10 +79,15 @@ let main () =
     let s = S.add_bounds s (1, minus_inf, inf) in
     let s = S.add_bounds s (2, minus_inf, inf) in
     let s = S.add_bounds s (10, of_int 1, inf) in
-    let res = S.nsolve s (*~debug:(S.print_debug print_var)*) (fun _ -> true) in
-    fprintf std_formatter "%a@\n%a@."
-        (S.print_debug print_var) s
-        print_nsol res;
+    if 0 = 0 then begin
+        let res = S.ksolve ~debug:(S.print_debug print_var) s in
+        fprintf std_formatter "%a@." print_ksol res
+    end else begin
+        let res = S.nsolve s (fun _ -> true) in
+        fprintf std_formatter "%a@\n%a@."
+            (S.print_debug print_var) s
+            print_nsol res
+    end;
     ()
 
 
