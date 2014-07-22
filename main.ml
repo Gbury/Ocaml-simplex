@@ -26,19 +26,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 open Q
 open Format
-module S = Simplex.MakeHelp(struct type t = int let compare = Pervasives.compare end)
+module S = Simplex.Make(struct type t = int let compare = Pervasives.compare end)
 ;;
-Random.self_init ()
-;;
-
 
 let max_depth = 5
 let max_rand = 100
 let bound_range = 30
 
-let svar = function
-    | S.Extern x -> sprintf "v%d" x
-    | S.Intern i -> sprintf "i%d" i
+let svar x = sprintf "v%d" x
 
 let print_var fmt x = fprintf fmt "%s" (svar x)
 
@@ -78,50 +73,16 @@ let rec print_branch n fmt b =
 let print_ksol = print_res print_unsat
 let print_nsol = print_res (print_branch 0)
 
-(*
-let rand_z () = (of_int (Random.int max_rand)) - ((of_int max_rand) / (of_int 2))
-let rand_bounds x =
-    match Random.int 3 with
-    | 0 -> (x, rand_z (), inf)
-    | 1 -> (x, minus_inf, rand_z ())
-    | _ -> let l = rand_z () in (x, l, l + of_int (Random.int bound_range))
-
-let ln n =
-    let rec aux n = if n <= 0 then [] else n :: (aux (Pervasives.(-) n 1)) in
-    List.rev (aux n)
-
-let rand_sys n m =
-    let nbasic = ln n in
-    let basic = List.map (Pervasives.(+) n) (ln m) in
-    let aux1 s x = S.add_eq s (x, (List.map (fun y -> (rand_z (), y)) nbasic)) in
-    let aux2 s x = S.add_bounds s (rand_bounds x) in
-    List.fold_left aux2 (List.fold_left aux1 S.empty basic) basic
-
-let random n m =
-    let s = rand_sys n m in
-    let _ = S.preprocess s (fun _ -> true) in
-    (* S.print_debug print_var std_formatter s; *)
-    let res = S.nsolve_incr s (fun _ -> true) in
-    match res () with
-    | Some res' ->
-            fprintf std_formatter "%a@." print_nsol res'
-    | None ->
-            fprintf std_formatter "Reached max_depth@."
-*)
-
-
 let main () =
     let s = S.empty in
-    let s = S.add_constraints s [
-        S.Eq, [of_int 1, 0; of_int (-2), 1], of_int 0;
-        S.LessEq, [of_int 2, 2; of_int (-1), 0], of_int 0;
-    ] in
-    let res = S.nsolve s (fun _ -> true) in
-    let abs = S.abstract_val s (fun i -> i = 2 || i = 2) (fun i -> i = 1 || i = 1) in
-    fprintf std_formatter "%a@\n%a@\n%a@."
+    let s = S.add_eq s (10, [of_int 3, 1; of_int 2, 2]) in
+    let s = S.add_bounds s (1, minus_inf, inf) in
+    let s = S.add_bounds s (2, minus_inf, inf) in
+    let s = S.add_bounds s (10, of_int 1, inf) in
+    let res = S.nsolve s (*~debug:(S.print_debug print_var)*) (fun _ -> true) in
+    fprintf std_formatter "%a@\n%a@."
         (S.print_debug print_var) s
-        print_nsol res
-        print_abs abs;
+        print_nsol res;
     ()
 
 
