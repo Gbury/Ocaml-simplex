@@ -25,7 +25,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *)
 
 (* OPTIMS:
- * - distinguish separate systems (that do not interact), such as in { 1 <= 3x = 3y <= 2; z <= 3}.
+ * - distinguish separate systems (that do not interact), such as in { 1 <= 3x = 3y <= 2; z <= 3} ?
  * - Implement gomorry cuts ?
 *)
 
@@ -59,7 +59,7 @@ module type S = sig
     val empty       : t
     val copy        : t -> t
     val add_eq      : t -> var * (Q.t * var) list -> t
-    val add_bounds  : t -> var * Q.t * Q.t -> t
+    val add_bounds  : t -> ?strict_lower:bool -> ?strict_upper:bool -> var * Q.t * Q.t -> t
     (* Simplex solving *)
     val ksolve      : ?debug:(Format.formatter -> t -> unit) -> t -> k_res
     val nsolve      : t -> (var -> bool) -> n_res
@@ -70,7 +70,7 @@ module type S = sig
     val normalize    : (var -> bool) -> t -> optim list
     val preprocess   : t -> (var -> bool) -> optim list
     val apply_optims : (t -> optim list) list -> t -> optim list
-    (* Access functions *)
+    (* Access functions, some are rewritten at the end of the module *)
     val get_tab         : t -> var list * var list * Q.t list list
     val get_assign      : t -> (var * Q.t) list
     val get_full_assign : t -> (var * Q.t) list
@@ -94,12 +94,14 @@ module Make(Var: OrderedType) = struct
 
     (* Type declarations *)
     type var = Var.t
+    type erat = Q.t * Q.t
+
     type t = {
         tab : Q.t array array;
         basic : Var.t array;
         nbasic : Var.t array;
-        mutable assign : Q.t M.t;
-        mutable bounds : (Q.t * Q.t) M.t; (* (lower, upper) *)
+        mutable assign : erat M.t;
+        mutable bounds : (erat * erat) M.t; (* (lower, upper) *)
     }
 
     type 'cert res =
@@ -116,6 +118,22 @@ module Make(Var: OrderedType) = struct
     type n_res = n_cert res
 
     type debug_printer = Format.formatter -> t -> unit
+
+    (* epsilon-rationals *)
+    let ezero = Q.zero, Q.zero
+    let mul k (a,e) = Q.((k * a, k * e))
+    let sum (a,e1) (b,e2) = Q.((a + b, e1 + e2))
+    let compare (a,e1) (b,e2) = match Q.compare a b with
+        | 0 -> Q.compare e1 e2
+        | x -> x
+
+    let lt a b = compare a b < 0
+    let gt a b = compare a b > 0
+
+    let min x y = if compare x y <= 0 then x else y
+    let max x y = if compare x y >= 0 then x else y
+
+    let evaluate epsilon (a,e) = Q.(a + epsilon * e)
 
     (* Base manipulation functions *)
     let matrix_map f m =
@@ -194,23 +212,23 @@ module Make(Var: OrderedType) = struct
             M.find x t.assign
         with Not_found ->
             try
-                let res = ref Q.zero in
+                let res = ref ezero in
                 let expr = find_expr_basic t x in
                 for i = 0 to Array.length expr - 1 do
-                    res := Q.(!res + expr.(i) * M.find t.nbasic.(i) t.assign)
+                    res := sum !res (mul expr.(i) (M.find t.nbasic.(i) t.assign))
                 done;
                 !res
             with Not_found ->
                 raise (UnExpected "Basic variable in expression of a basic variable.")
 
-    let get_bounds t x = try M.find x t.bounds with Not_found -> Q.minus_inf, Q.inf
+    let get_bounds t x = try M.find x t.bounds with Not_found -> Q.((minus_inf, zero), (inf, zero))
 
     let is_within t x =
         let v = value t x in
         let low, upp = get_bounds t x in
-        if Q.compare v low <= -1 then
+        if compare v low <= -1 then
             (false, low)
-        else if Q.compare v upp >= 1 then
+        else if compare v upp >= 1 then
             (false, upp)
         else
             (true, v)
@@ -227,7 +245,7 @@ module Make(Var: OrderedType) = struct
                     (fun i j -> if j < Array.length t.nbasic then t.tab.(i).(j) else Q.zero);
                 basic = copy_array t.basic;
                 nbasic = Array.append t.nbasic a;
-                assign = List.fold_left (fun acc y -> M.add y Q.zero acc) t.assign l;
+                assign = List.fold_left (fun acc y -> M.add y ezero acc) t.assign l;
                 bounds = t.bounds;
             }
         end
@@ -246,11 +264,13 @@ module Make(Var: OrderedType) = struct
     let add_bound_aux t (x, low, upp) =
         let t = add_vars t [x] in
         let l, u = get_bounds t x in
-        { t with bounds = M.add x (Q.max l low, Q.min u upp) t.bounds }
+        { t with bounds = M.add x (max l low, min u upp) t.bounds }
 
-    let add_bounds t (x, l, u) =
+    let add_bounds t ?strict_lower:(slow=false) ?strict_upper:(supp=false) (x, l, u) =
         let t = copy t in
-        let t = add_bound_aux t (x, l, u) in
+        let e1 = if slow then Q.one else Q.zero in
+        let e2 = if supp then Q.neg Q.one else Q.zero in
+        let t = add_bound_aux t (x, (l,e1), (u,e2)) in
         if mem x t.nbasic then
             let (b, v) = is_within t x in
             if b then
@@ -261,13 +281,15 @@ module Make(Var: OrderedType) = struct
             t
 
     (* Modifies bounds in place. Do NOT export. *)
-    let add_bounds_imp ?force:(b=false) t (x, l, u) =
+    let add_bounds_imp ?force:(b=false) t ?strict_lower:(slow=false) ?strict_upper:(supp=false) (x, l, u) =
+        let low = (l, if slow then Q.one else Q.zero) in
+        let upp = (u, if supp then Q.neg Q.one else Q.zero) in
         if mem x t.basic || mem x t.nbasic then begin
             if b then
-                t.bounds <- M.add x (l, u) t.bounds
+                t.bounds <- M.add x (low, upp) t.bounds
             else
-                let low, upp = get_bounds t x in
-                t.bounds <- M.add x (Q.max l low, Q.min u upp) t.bounds;
+                let low', upp' = get_bounds t x in
+                t.bounds <- M.add x (max low low', min upp upp') t.bounds;
             if mem x t.nbasic then
                 let (b, v) = is_within t x in
                 if not b then
@@ -277,19 +299,41 @@ module Make(Var: OrderedType) = struct
 
     let change_bounds = add_bounds_imp ~force:true
 
-    let get_full_assign t = List.map (fun x -> (x, value t x))
+    let full_assign t = List.map (fun x -> (x, value t x))
         (List.sort Var.compare (Array.to_list t.nbasic @ Array.to_list t.basic))
+
+    let solve_epsilon t =
+        let emin = ref Q.zero in
+        let emax = ref Q.inf in
+        M.iter (fun x (l, u) ->
+            let v,e = value t x in
+            let (low,e1), (upp,e2) = if Q.sign e >= 0 then (l,u) else (u,l) in
+            let e = Q.abs e in
+            emin := Q.max !emin Q.((low - v) / (e - e1));
+            emax := Q.min !emax Q.((upp - v) / (e - e2));
+        ) t.bounds;
+        if Q.gt !emin Q.zero then
+            !emin
+        else if Q.geq !emax Q.one then
+            Q.one
+        else
+            !emax
+
+    let get_full_assign t =
+        let e = solve_epsilon t in
+        let f = evaluate e in
+        List.map (fun (x, v) -> (x, f v)) (full_assign t)
 
     let find_suitable t x =
         let _, v = is_within t x in
-        let b = Q.lt (value t x) v in
+        let b = compare (value t x) v < 0 in
         let test y a =
             let v = value t y in
             let low, upp = get_bounds t y in
             if b then
-                (Q.lt v upp && Q.gt a Q.zero) || (Q.gt v low && Q.lt a Q.zero)
+                (lt v upp && Q.gt a Q.zero) || (gt v low && Q.lt a Q.zero)
             else
-                (Q.gt v low && Q.gt a Q.zero) || (Q.lt v upp && Q.lt a Q.zero)
+                (gt v low && Q.gt a Q.zero) || (lt v upp && Q.lt a Q.zero)
         in
         let rec aux l1 l2 = match l1, l2 with
             | [], [] -> []
@@ -343,7 +387,7 @@ module Make(Var: OrderedType) = struct
 
     let rec solve_aux debug t =
         debug t;
-        M.iter (fun x (l, u) -> if Q.gt l u then raise (AbsurdBounds x)) t.bounds;
+        M.iter (fun x (l, u) -> if gt l u then raise (AbsurdBounds x)) t.bounds;
         try
             while true do
                 let x = List.find (fun y -> not (fst (is_within t y))) (List.sort Var.compare (Array.to_list t.basic)) in
@@ -381,7 +425,7 @@ module Make(Var: OrderedType) = struct
         Q.of_bigint (List.fold_left aux (Q.to_bigint (Q.mul (List.hd expr) k)) (List.tl expr))
 
     let global_bound t =
-        let m, max_coef = M.fold (fun x (l, u) (m, max_coef) ->
+        let m, max_coef = M.fold (fun x ((l,_), (u,_)) (m, max_coef) ->
             let m = m + (if Q.is_real l then 1 else 0) + (if Q.is_real u then 1 else 0) in
             let expr = Array.to_list (find_expr_total t x) in
             let k = Q.of_bigint (denlcm (l :: u :: expr)) in
@@ -390,7 +434,7 @@ module Make(Var: OrderedType) = struct
                 (Q.to_bigint (List.fold_left Q.max Q.zero (List.filter Q.is_real (List.map (fun x -> Q.abs (Q.div (Q.mul k x) k')) (l :: u :: expr))))) in
             m, max_coef
         ) t.bounds (0, Z.zero) in
-        let n = max (Array.length t.nbasic) m in
+        let n = Pervasives.max (Array.length t.nbasic) m in
         Q.of_bigint (Z.pow (Z.mul (Z.of_int 2) (Z.mul (Z.pow (Z.of_int n) 2) max_coef)) n)
 
     let bound_all t int_vars g =
@@ -411,7 +455,9 @@ module Make(Var: OrderedType) = struct
         let mask = List.map int_vars (Array.to_list t.nbasic) in
         let aux x expr =
             let tmp = ref [] in
-            let l, u = get_bounds t x in
+            let (l,e1), (u,e2) = get_bounds t x in
+            let s1 = not (Q.equal e1 Q.zero) in
+            let s2 = not (Q.equal e2 Q.zero) in
             let k = Q.of_bigint (denlcm (l :: u :: expr)) in
             let k' = lgcd k expr in
             let k'' = Q.div k k' in
@@ -419,9 +465,9 @@ module Make(Var: OrderedType) = struct
                 (not (Q.equal k' Q.one) && (not (is_z (Q.div (Q.mul l k) k')) || not (is_z (Q.div (Q.mul u k) k')))) then begin
                 let low, upp = ceil (Q.mul l k''), floor (Q.mul u k'') in
                 tmp := [Tight x];
-                change_bounds t (x, low, upp)
+                change_bounds t ~strict_lower:s1 ~strict_upper:s2 (x, low, upp)
             end else
-                change_bounds t (x, Q.mul l k'', Q.mul u k'');
+                change_bounds t ~strict_lower:s1 ~strict_upper:s2 (x, Q.mul l k'', Q.mul u k'');
             (Multiply (x, k'') :: !tmp, List.map (fun c -> Q.mul c k'') expr)
         in
         let o, tab = List.fold_left2 (fun (opt_l, tab_l) x e ->
@@ -432,9 +478,11 @@ module Make(Var: OrderedType) = struct
 
     let tighten int_vars t =
         let aux acc x =
-            let l, u = get_bounds t x in
+            let (l,e1), (u,e2) = get_bounds t x in
+            let s1 = not (Q.equal e1 Q.zero) in
+            let s2 = not (Q.equal e2 Q.zero) in
             if is_q l || is_q u then begin
-                change_bounds t (x, ceil l, floor u);
+                change_bounds t ~strict_lower:s1 ~strict_upper:s2 (x, ceil l, floor u);
                 Tight x :: acc
             end else
                 acc
@@ -469,8 +517,8 @@ module Make(Var: OrderedType) = struct
                     t.bounds <- bounds;
                     add_bounds_imp t new_bound;
                     solve_aux f t;
-                    let x = List.find (fun y -> not (is_z (value t y))) int_vars in
-                    let v = value t x in
+                    let x = List.find (fun y -> not (is_z (fst (value t y)))) int_vars in
+                    let v, _ = value t x in
                     let v' = Z.ediv (Q.num v) (Q.den v) in
                     let under, above = (ref None), (ref None) in
                     res := Some (Branch (x, v', under, above));
@@ -532,8 +580,9 @@ module Make(Var: OrderedType) = struct
         Array.to_list t.nbasic,
         Array.to_list t.basic,
         List.map Array.to_list (Array.to_list t.tab)
-    let get_assign t = M.bindings t.assign
-    let get_all_bounds t = M.bindings t.bounds
+    let get_assign t = List.map (fun (x, (v,e)) -> (x,v)) (M.bindings t.assign)
+    let get_bounds t x = let ((l,_), (u,_)) = get_bounds t x in (l,u)
+    let get_all_bounds t = List.map (fun (x,((l,_),(u,_))) -> (x, (l, u))) (M.bindings t.bounds)
 
     let pp_to_str f format =
         f Format.str_formatter format;
@@ -558,23 +607,25 @@ module Make(Var: OrderedType) = struct
     let bounds_box var_to_string t =
         let a = Array.make_matrix (M.cardinal t.bounds) 5 "<=" in
         let i = ref 0 in
-        M.iter (fun x (l, u) ->
+        M.iter (fun x ((l,e1), (u,e2)) ->
             a.(!i).(0) <- Q.to_string l;
+            if not (Q.equal e1 Q.zero) then a.(!i).(1) <- "<";
             a.(!i).(2) <- var_to_string x;
+            if not (Q.equal e2 Q.zero) then a.(!i).(3) <- "<";
             a.(!i).(4) <- Q.to_string u;
             incr i;
         ) t.bounds;
         PrintBox.grid_text ~pad:(PrintBox.hpad 1) ~bars:false a
 
     let print_assign print_var fmt l =
-        List.iter (fun (x, c) -> Format.fprintf fmt "%a -> %s;@ " print_var x (Q.to_string c)) l
+        List.iter (fun (x, (c,e)) -> Format.fprintf fmt "%a -> %s + %s e;@ " print_var x (Q.to_string c) (Q.to_string e)) l
 
     let print_debug print_var fmt t =
         Format.fprintf fmt
             "@[*** System state ***@.%s@.%s@\n@[<hov 2>Current assign:@\n%a@]@\n******** END ********@."
             (PrintBox.to_string (tab_box (pp_to_str print_var) t))
             (PrintBox.to_string (bounds_box (pp_to_str print_var) t))
-            (print_assign print_var) (get_assign t)
+            (print_assign print_var) (M.bindings t.assign)
 
 end
 

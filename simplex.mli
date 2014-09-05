@@ -88,8 +88,9 @@ module type S = sig
     (** [add_bounds (x, lower, upper)] returns a system containing the same contraints as [s], plus
         the bounds [lower] and [upper] for the given variable [x]. If the bound is loose on one side (no upper bounds for instance),
         the values [Zarith.Q.inf] and [Zarith.Q.minus_inf] can be used. By default, in a system, all variables have no bounds,
-        i.e have lower bound [Zarith.Q.minus_inf] and upper bound [Zarith.Q.inf]. *)
-    val add_bounds  : t -> var * Q.t * Q.t -> t
+        i.e have lower bound [Zarith.Q.minus_inf] and upper bound [Zarith.Q.inf].
+        Optional parameters allow to make the the bounds strict. Defaults to false, so that bounds are large by default. *)
+    val add_bounds  : t -> ?strict_lower:bool -> ?strict_upper:bool -> var * Q.t * Q.t -> t
 
     (** {3 Simplex solving} *)
 
