@@ -149,7 +149,11 @@ module Make(Var: OrderedType) = struct
         m
 
     let copy_array a = Array.init (Array.length a) (fun i -> a.(i))
-    let copy_matrix m = init_matrix (Array.length m) (Array.length m.(0)) (fun i j -> m.(i).(j))
+    let copy_matrix m =
+        if Array.length m = 0 then
+            init_matrix 0 0 (fun i j -> Q.zero)
+        else
+            init_matrix (Array.length m) (Array.length m.(0)) (fun i j -> m.(i).(j))
 
     let empty = {
         tab = [| |];
@@ -648,7 +652,7 @@ module type HELPER = sig
 
   type monome = (Q.t * external_var) list
 
-  type op = LessEq | Eq | GreaterEq
+  type op = Less | LessEq | Eq | Greater | GreaterEq
 
   type constraint_ = op * monome * Q.t
 
@@ -686,7 +690,7 @@ module MakeHelp(Var : OrderedType) = struct
 
   type monome = (Q.t * external_var) list
 
-  type op = LessEq | Eq | GreaterEq
+  type op = Less | LessEq | Eq | Greater | GreaterEq
 
   type constraint_ = op * monome * Q.t
 
@@ -725,11 +729,20 @@ module MakeHelp(Var : OrderedType) = struct
         let const' = Q.div const coeff in
         match op with
         | Eq -> add_bounds simpl (var,const',const')
+        | Less ->
+            (* beware the multiplication by a negative number *)
+            if Q.sign coeff < 0
+              then add_bounds simpl ~strict_lower:true (var,const',Q.inf)
+              else add_bounds simpl ~strict_upper:true (var,Q.minus_inf,const')
         | LessEq ->
             (* beware the multiplication by a negative number *)
             if Q.sign coeff < 0
               then add_bounds simpl (var,const',Q.inf)
               else add_bounds simpl (var,Q.minus_inf,const')
+        | Greater ->
+            if Q.sign coeff < 0
+              then add_bounds simpl ~strict_upper:true (var,Q.minus_inf,const')
+              else add_bounds simpl ~strict_lower:true (var,const',Q.inf)
         | GreaterEq ->
             if Q.sign coeff < 0
               then add_bounds simpl (var,Q.minus_inf,const')

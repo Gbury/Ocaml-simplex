@@ -202,7 +202,7 @@ module type HELPER = sig
 
   type monome = (Q.t * external_var) list
 
-  type op = LessEq | Eq | GreaterEq
+  type op = Less | LessEq | Eq | Greater | GreaterEq
 
   type constraint_ = op * monome * Q.t
 
