@@ -307,16 +307,20 @@ module Make(Var: OrderedType) = struct
         (List.sort Var.compare (Array.to_list t.nbasic @ Array.to_list t.basic))
 
     let solve_epsilon t =
-        let emin = ref Q.zero in
+        let emin = ref Q.minus_inf in
         let emax = ref Q.inf in
         M.iter (fun x (l, u) ->
             let v,e = value t x in
             let (low,e1), (upp,e2) = if Q.sign e >= 0 then (l,u) else (u,l) in
             let e = Q.abs e in
-            emin := Q.max !emin Q.((low - v) / (e - e1));
-            emax := Q.min !emax Q.((upp - v) / (e - e2));
+            if Q.(e - e1 <> zero) then
+                emin := Q.max !emin Q.((low - v) / (e - e1));
+            if Q.(e - e2 <> zero) then
+                emax := Q.min !emax Q.((upp - v) / (e - e2));
         ) t.bounds;
-        if Q.gt !emin Q.zero then
+        if Q.equal Q.minus_inf !emin && Q.equal Q.inf !emax then
+            Q.zero
+        else if Q.gt !emin Q.zero then
             !emin
         else if Q.geq !emax Q.one then
             Q.one
