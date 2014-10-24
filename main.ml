@@ -75,20 +75,23 @@ let print_nsol = print_res (print_branch 0)
 
 let main () =
     let s = S.empty in
-    let s = S.add_bounds s ~strict_lower:true ~strict_upper:true (1, of_int 1, of_int 2) in
+    let s = S.add_eq s (10, [of_int 3, 1; of_int 3, 2; of_int 3, 3]) in
+    let s = S.add_bounds s (10, of_int 1, of_int 2) in
     (*
-    let s = S.add_eq s (10, [of_int 1, 1; of_int 1, 2]) in
     let s = S.add_bounds s (2, of_int 1, inf) in
     let s = S.add_bounds s (10, minus_inf, of_int 2) in
     *)
-    if 0 = 0 then begin
+    if 0 = 1 then begin
         let res = S.ksolve ~debug:(S.print_debug print_var) s in
         fprintf std_formatter "%a@." print_ksol res
     end else begin
-        let res = S.nsolve s (fun _ -> true) in
-        fprintf std_formatter "%a@\n%a@."
-            (S.print_debug print_var) s
-            print_nsol res
+        let f = S.nsolve_incr s (fun _ -> true) in
+        match f () with
+        | None -> Format.printf "Not finished !@."
+        | Some res ->
+                fprintf std_formatter "%a@\n%a@."
+                (S.print_debug print_var) s
+                print_nsol res
     end;
     ()
 
