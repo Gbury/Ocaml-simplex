@@ -78,20 +78,32 @@ let rec print_branch n fmt b =
 let print_ksol = print_res print_unsat
 let print_nsol = print_res (print_branch 0)
 
-let main () =
+let omega_test () =
     let s = S.create () in
     S.add_eq s (10, [of_int 11, 1; of_int 13, 2]);
     S.add_eq s (11, [of_int 7, 1; of_int (-9), 2]);
     S.add_bounds s ~strict_lower:false ~strict_upper:false (10, of_int 27, of_int 45);
     S.add_bounds s ~strict_lower:false ~strict_upper:false (11, of_int (-10), of_int 4);
+    s
+
+let bb_test () =
+    let s = S.create () in
+    S.add_eq s (10, [of_int 3, 1; of_int 3, 2; of_int 3, 3]);
+    S.add_bounds s (10, of_int 1, of_int 2);
+    s
+
+let main () =
+    let s = bb_test () in
     if false then begin
         let res = S.ksolve ~debug:(S.print_debug print_var) s in
         fprintf std_formatter "%a@." print_ksol res
     end else begin
-        let res = S.nsolve s (fun _ -> true) in
-        fprintf std_formatter "%a@\n%a@."
-            (S.print_debug print_var) s
-            print_nsol res
+        let f = S.nsolve_incr s (fun _ -> true) in
+        match f () with
+        | None -> fprintf std_formatter "Not finished !@."
+        | Some res ->
+                fprintf std_formatter "%a@\n%a@."
+                (S.print_debug print_var) s print_nsol res
     end;
     ()
 
