@@ -98,8 +98,8 @@ let test () =
     s
 
 let main () =
-    let s = test () in
-    if true then begin
+    let s = bb_test () in
+    if false then begin
         let res = S.ksolve ~debug:(S.print_debug print_var) s in
         fprintf std_formatter "%a@." print_ksol res
     end else begin
