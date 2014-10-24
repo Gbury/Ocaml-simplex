@@ -92,9 +92,14 @@ let bb_test () =
     S.add_bounds s (10, of_int 1, of_int 2);
     s
 
+let test () =
+    let s = S.create () in
+    S.add_bounds s ~strict_lower:true (1, (of_int 1) / (of_int 2), inf);
+    s
+
 let main () =
-    let s = bb_test () in
-    if false then begin
+    let s = test () in
+    if true then begin
         let res = S.ksolve ~debug:(S.print_debug print_var) s in
         fprintf std_formatter "%a@." print_ksol res
     end else begin
