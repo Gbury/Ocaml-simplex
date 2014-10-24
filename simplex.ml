@@ -565,7 +565,7 @@ module Make(Var: VarType) = struct
         bound_all t int_vars g;
         g, nsolve t int_vars
 
-    let base_depth t = 20 + 2 * (CCVector.length t.nbasic)
+    let base_depth t = 51 + 2 * (CCVector.length t.nbasic)
 
     let nsolve_incr t int_vars =
         if CCVector.length t.nbasic = 0 then
